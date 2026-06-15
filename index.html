@@ -1,1 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Wars 像素戰爭 App版</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #121212;
+            color: white;
+            font-family: sans-serif;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* 1. 🎬 App 專用專業加載動畫遮罩層 */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.6s ease, visibility 0.6s ease;
+        }
 
+        /* 漸變彩虹文字 PIXEL WARS */
+        .loading-title {
+            font-size: 36px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            background: linear-gradient(45deg, #ff0055, #0099ff, #00ffcc, #ff0055);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 35px;
+            animation: gradientText 3s ease infinite, textPulse 2s infinite ease-in-out;
+        }
+
+        /* 進度條外框 */
+        .progress-container {
+            width: 65%;
+            max-width: 280px;
+            height: 5px;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 25px;
+        }
+
+        /* 進度條動態增長 */
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff0055, #0099ff);
+            border-radius: 4px;
+            animation: fillProgress 2.8s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+        }
+
+        /* 轉圈圈等待動畫 */
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #0099ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        /* 動畫 Keyframes */
+        @keyframes gradientText {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes textPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+        @keyframes fillProgress {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 📊 左上角數據面板 */
+        #ui-stats {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(20, 20, 20, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 10px 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 20;
+            font-size: 13px;
+            line-height: 1.5;
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: auto;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .dot-online {
+            width: 8px;
+            height: 8px;
+            background-color: #34c759;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px #34c759;
+        }
+        .dot-views {
+            width: 8px;
+            height: 8px;
+            background-color: #007aff;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px #007aff;
+        }
+
+        #ui-top {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            width: 90%;
+        }
+        h1 { margin: 0; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        p { margin: 5px 0 0 0; font-size: 13px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+        
+        #timer {
+            font-weight: bold;
+            color: #ff3b30;
+        }
+
+        #viewport {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: grab;
+        }
+        #viewport:active { cursor: grabbing; }
+
+        #canvas-wrapper {
+            position: absolute;
+            box-shadow: 0 0 40px rgba(0,0,0,0.6);
+            background-color: white;
+            background-image: 
+                linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
+            background-size: 10px 10px;
+            transform-origin: 0 0;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        #ui-bottom {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+        .palette {
+            display: flex;
+            gap: 8px;
+            background: rgba(40, 40, 40, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 8px 15px;
+            border-radius: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            align-items: center;
+        }
+        .color-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+        .color-btn.active {
+            border-color: white;
+            transform: scale(1.1);
+        }
+        
+        .color-custom-label {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            background: linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+            box-sizing: border-box;
+            display: block;
+            transition: transform 0.1s;
+        }
+        .color-custom-label.active {
+            border-color: white;
+            transform: scale(1.1);
+        }
+        #custom-color-picker {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+        }
+
+        /* 🔮 Discord 懸浮按鈕 */
+        #discord-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background-color: #5865F2;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+            z-index: 20;
+            transition: transform 0.2s, background-color 0.2s;
+            text-decoration: none;
+        }
+        #discord-btn:hover {
+            transform: scale(1.1);
+            background-color: #4752C4;
+        }
+        #discord-btn svg {
+            width: 26px;
+            height: 26px;
+            fill: white;
+        }
+
+        /* 📱 【手機/App 端專用 RWD 優化】 */
+        @media (max-width: 768px) {
+            #discord-btn {
+                display: none !important;
+            }
+            #ui-stats {
+                display: none !important;
+            }
+            h1 {
+                font-size: 16px;
+            }
+            p {
+                font-size: 11px;
+            }
+        }
+    </style>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <div class="loading-title">PIXEL WARS</div>
+        <div class="progress-container">
+            <div class="progress-bar"></div>
+        </div>
+        <div class="spinner"></div>
+    </div>
+
+    <div id="ui-stats">
+        <div class="stat-item"><span class="dot-online"></span> 即時在線：<span id="online-count">0</span> 人</div>
+        <div class="stat-item"><span class="dot-views"></span> 總瀏覽量：<span id="view-count">0</span> 次</div>
+    </div>
+
+    <div id="ui-top">
+        <h1>Pixel Wars 像素戰爭</h1>
+        <p id="status">正在連線至伺服器...</p>
+    </div>
+
+    <div id="viewport">
+        <div id="canvas-wrapper">
+            <canvas id="pixelCanvas"></canvas>
+        </div>
+    </div>
+
+    <div id="ui-bottom">
+        <div class="palette" id="palette">
+            <div class="color-btn active" style="background-color: #000000;" data-color="#000000"></div>
+            <div class="color-btn" style="background-color: #ffffff; border: 1px solid #555;" data-color="#ffffff"></div>
+            <div class="color-btn" style="background-color: #e50000;" data-color="#e50000"></div>
+            <div class="color-btn" style="background-color: #00cc00;" data-color="#00cc00"></div>
+            <div class="color-btn" style="background-color: #0000e5;" data-color="#0000e5"></div>
+            <div class="color-btn" style="background-color: #f5f500;" data-color="#f5f500"></div>
+            <div class="color-btn" style="background-color: #a000a0;" data-color="#a000a0"></div>
+            <div class="color-btn" style="background-color: #00a0a0;" data-color="#00a0a0"></div>
+            
+            <label class="color-custom-label" id="custom-color-label" for="custom-color-picker" title="自訂顏色"></label>
+            <input type="color" id="custom-color-picker" value="#ff0000">
+        </div>
+    </div>
+
+    <a href="https://discord.gg/RSbvaExgfX" target="_blank" id="discord-btn" title="加入官方 Discord">
+        <svg viewBox="0 0 127.14 96.36">
+            <path d="M107.7,8.07A105.15,105.15,0,0,0,77.26,0a77.19,77.19,0,0,0-3.3,6.83A96.67,96.67,0,0,0,53.22,6.83,77.19,77.19,0,0,0,49.88,0,105.15,105.15,0,0,0,19.44,8.07C3.66,31.58-1.86,54.65,1,77.53A105.73,105.73,0,0,0,32,96.36a74.37,74.37,0,0,0,6.84-11.12,68.43,68.43,0,0,1-10.75-5.18c.91-.66,1.8-1.34,2.65-2a75.58,75.58,0,0,0,72.7,0c.85.69,1.74,1.37,2.65,2a68.43,68.43,0,0,1-10.75,5.18,74.37,74.37,0,0,0,6.84,11.12,105.73,105.73,0,0,0,31.6-18.83C129.56,49.63,123.63,26.83,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53S36.18,40.36,42.45,40.36,53.83,46,53.83,53,48.72,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.24,60,73.24,53S78.41,40.36,84.69,40.36,96.07,46,96.07,53,91,65.69,84.69,65.69Z"/>
+        </svg>
+    </a>
+
+    <script>
+        // 🎬 控制加載動畫的邏輯
+        const loadingScreen = document.getElementById('loading-screen');
+        
+        function hideLoadingScreen() {
+            loadingScreen.style.opacity = '0';
+            loadingScreen.style.visibility = 'hidden';
+        }
+
+        // 安全機制：3秒後無論如何一定強制關閉動畫
+        const fallbackTimer = setTimeout(hideLoadingScreen, 3000);
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCBdgYtNIFl21qObobpNCVsovzrAoPPUv8",
+            authDomain: "my-pixel-wars.firebaseapp.com",
+            projectId: "my-pixel-wars",
+            storageBucket: "my-pixel-wars.firebasestorage.app",
+            messagingSenderId: "559903428145",
+            appId: "1:559903428145:web:2f9b3db4f56a1abb918f10",
+            measurementId: "G-Q378F75DH8",
+            databaseURL: "https://my-pixel-wars-default-rtdb.firebaseio.com"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const pixelsRef = db.ref('pixels');
+
+        const onlineCountEl = document.getElementById('online-count');
+        const viewCountEl = document.getElementById('view-count');
+
+        db.ref('stats/totalViews').on('value', (snap) => {
+            if(snap.exists()) viewCountEl.innerText = snap.val();
+        });
+
+        db.ref('stats/totalViews').transaction((current) => (current || 0) + 1);
+
+        const connectionsRef = db.ref('stats/connections');
+        
+        connectionsRef.on('value', (snap) => {
+            onlineCountEl.innerText = snap.numChildren();
+        });
+
+        db.ref('.info/connected').on('value', (snapshot) => {
+            if (snapshot.val() === true) {
+                const myConnectionRef = connectionsRef.push();
+                myConnectionRef.onDisconnect().remove();
+                myConnectionRef.set(true);
+                updateStatusText();
+            } else {
+                statusText.innerText = "斷線中，正在重新連線...";
+            }
+        });
+
+        const viewport = document.getElementById('viewport');
+        const wrapper = document.getElementById('canvas-wrapper');
+        const canvas = document.getElementById('pixelCanvas');
+        const ctx = canvas.getContext('2d');
+        const palette = document.getElementById('palette');
+        const statusText = document.getElementById('status');
+        
+        const customColorPicker = document.getElementById('custom-color-picker');
+        const customColorLabel = document.getElementById('custom-color-label');
+
+        const MAP_SIZE = 500; 
+        const CELL_SIZE = 10;
+
+        wrapper.style.width = (MAP_SIZE * CELL_SIZE) + 'px';
+        wrapper.style.height = (MAP_SIZE * CELL_SIZE) + 'px';
+        canvas.width = MAP_SIZE;
+        canvas.height = MAP_SIZE;
+
+        ctx.imageSmoothingEnabled = false;
+
+        let scale = 1;         
+        let offsetX = 0;       
+        let offsetY = 0;       
+        let isDragging = false;
+        let startX, startY;
+        let touchStartDist = 0; 
+        let startScale = 1;
+        let isPanning = false;  
+        let selectedColor = '#000000';
+
+        const localMap = {}; 
+        let cooldownEndTime = 0;
+        
+        let renderRequested = false;
+        function requestRender() {
+            if (!renderRequested) {
+                renderRequested = true;
+                requestAnimationFrame(() => {
+                    renderRequested = false;
+                    render();
+                });
+            }
+        }
+
+        function centerCanvas() {
+            scale = Math.min(window.innerWidth, window.innerHeight) / (MAP_SIZE * CELL_SIZE) * 0.9;
+            offsetX = (window.innerWidth - (MAP_SIZE * CELL_SIZE) * scale) / 2;
+            offsetY = (window.innerHeight - (MAP_SIZE * CELL_SIZE) * scale) / 2;
+            requestRender();
+        }
+
+        centerCanvas();
+        window.addEventListener('resize', centerCanvas);
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let key in localMap) {
+                const [x, y] = key.split(',').map(Number);
+                ctx.fillStyle = localMap[key];
+                ctx.fillRect(x, y, 1, 1);
+            }
+            if (scale > 0.8) {
+                wrapper.style.backgroundImage = `
+                    linear-gradient(to right, rgba(0,0,0,0.15) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0,0,0,0.15) 1px, transparent 1px)
+                `;
+            } else {
+                wrapper.style.backgroundImage = `
+                    linear-gradient(to right, rgba(0,0,0,0.03) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px)
+                `;
+            }
+            wrapper.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+        }
+
+        // 第一次成功抓到 Firebase 的主要畫布數據後關閉加載動畫
+        let firstLoad = true;
+        pixelsRef.once('value', () => {
+            if (firstLoad) {
+                clearTimeout(fallbackTimer);
+                setTimeout(hideLoadingScreen, 600);
+                firstLoad = false;
+            }
+        });
+
+        pixelsRef.on('child_added', (snapshot) => {
+            const key = snapshot.key;
+            const data = snapshot.val();
+            const cleanKey = key.replace('x', '').replace('y', '').replace('_', ',');
+            localMap[cleanKey] = data.color;
+            requestRender();
+        });
+
+        pixelsRef.on('child_changed', (snapshot) => {
+            const key = snapshot.key;
+            const data = snapshot.val();
+            const cleanKey = key.replace('x', '').replace('y', '').replace('_', ',');
+            localMap[cleanKey] = data.color;
+            requestRender();
+        });
+
+        if (localStorage.getItem('pixelCooldownEnd')) {
+            cooldownEndTime = parseInt(localStorage.getItem('pixelCooldownEnd'), 10);
+        }
+
+        function startCooldown() {
+            cooldownEndTime = Date.now() + (3 * 1000);
+            localStorage.setItem('pixelCooldownEnd', cooldownEndTime);
+            updateStatusText();
+        }
+
+        function updateStatusText() {
+            const now = Date.now();
+            if (now < cooldownEndTime) {
+                const timeLeft = Math.ceil((cooldownEndTime - now) / 1000);
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                statusText.innerHTML = `冷卻中！請等待 <span id="timer">${minutes}:${seconds < 10 ? '0' : ''}${seconds}</span> 後繼續`;
+                setTimeout(updateStatusText, 1000);
+            } else {
+                statusText.innerText = "可以點擊畫布放置像素點！";
+            }
+        }
+
+        function tryPlacePixel(clickX, clickY) {
+            if (Date.now() < cooldownEndTime) {
+                return;
+            }
+            if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
+                const dbKey = `x${clickX}_y${clickY}`;
+                pixelsRef.child(dbKey).set({
+                    color: selectedColor,
+                    timestamp: ServerValue.TIMESTAMP
+                }).then(() => {
+                    startCooldown();
+                }).catch((error) => {
+                    console.error("上傳失敗：", error);
+                });
+            }
+        }
+
+        const ServerValue = firebase.database.ServerValue;
+
+        viewport.addEventListener('mousedown', (e) => {
+            if (e.target === palette || e.target.closest('.color-btn') || e.target === customColorLabel) return;
+            isDragging = true;
+            isPanning = false;
+            startX = e.clientX - offsetX;
+            startY = e.clientY - offsetY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            isPanning = true;
+            offsetX = e.clientX - startX;
+            offsetY = e.clientY - startY;
+            requestRender();
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            if (!isPanning) {
+                const clickX = Math.floor((e.clientX - offsetX) / (scale * CELL_SIZE));
+                const clickY = Math.floor((e.clientY - offsetY) / (scale * CELL_SIZE));
+                tryPlacePixel(clickX, clickY);
+            }
+        });
+
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.2;
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            const canvasX = (mouseX - offsetX) / scale;
+            const canvasY = (mouseY - offsetY) / scale;
+
+            if (e.deltaY < 0) scale *= zoomFactor;
+            else scale /= zoomFactor;
+            scale = Math.max(0.05, Math.min(scale, 15));
+
+            offsetX = mouseX - canvasX * scale;
+            offsetY = mouseY - canvasY * scale;
+            requestRender();
+        }, { passive: false });
+
+        viewport.addEventListener('touchstart', (e) => {
+            if (e.target === palette || e.target.closest('.color-btn') || e.target === customColorLabel) return;
+            if (e.touches.length === 1) {
+                isDragging = true;
+                isPanning = false;
+                startX = e.touches[0].clientX - offsetX;
+                startY = e.touches[0].clientY - offsetY;
+            } else if (e.touches.length === 2) {
+                isDragging = false; 
+                startScale = scale;
+                touchStartDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+        });
+
+        viewport.addEventListener('touchmove', (e) => {
+            if (e.target === palette || e.target.closest('.color-btn') || e.target === customColorLabel) return;
+            e.preventDefault();
+            if (e.touches.length === 1 && isDragging) {
+                isPanning = true;
+                offsetX = e.touches[0].clientX - startX;
+                offsetY = e.touches[0].clientY - startY;
+                requestRender();
+            } else if (e.touches.length === 2) {
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const factor = dist / touchStartDist;
+                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                const canvasX = (midX - offsetX) / scale;
+                const canvasY = (midY - offsetY) / scale;
+
+                scale = Math.max(0.05, Math.min(startScale * factor, 15));
+                offsetX = midX - canvasX * scale;
+                offsetY = midY - canvasY * scale;
+                requestRender();
+            }
+        }, { passive: false });
+
+        viewport.addEventListener('touchend', (e) => {
+            if (isDragging && !isPanning && e.changedTouches.length > 0) {
+                const touch = e.changedTouches[0];
+                const clickX = Math.floor((touch.clientX - offsetX) / (scale * CELL_SIZE));
+                const clickY = Math.floor((touch.clientY - offsetY) / (scale * CELL_SIZE));
+                tryPlacePixel(clickX, clickY);
+            }
+            isDragging = false;
+        });
+
+        palette.addEventListener('click', (e) => {
+            if (e.target.classList.contains('color-btn')) {
+                const activeBtn = document.querySelector('.color-btn.active') || document.querySelector('.color-custom-label.active');
+                if (activeBtn) activeBtn.classList.remove('active');
+                e.target.classList.add('active');
+                selectedColor = e.target.getAttribute('data-color');
+            }
+        });
+
+        customColorPicker.addEventListener('input', (e) => {
+            const activeBtn = document.querySelector('.color-btn.active') || document.querySelector('.color-custom-label.active');
+            if (activeBtn) activeBtn.classList.remove('active');
+            customColorLabel.classList.add('active');
+            selectedColor = e.target.value;
+            customColorLabel.style.background = selectedColor;
+        });
+    </script>
+</body>
+</html>
